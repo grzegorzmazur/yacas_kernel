@@ -210,63 +210,83 @@ void YacasKernel::_handle_shell(zmqpp::message&& msg)
 
 void YacasKernel::_handle_engine(const zmqpp::message& msg)
 {
-    std::string task_info_buf;
-    msg.get(task_info_buf, 0);
-    
-    Json::Value task_info;
+    std::string msg_type;
+    msg.get(msg_type, 0);
 
-    Json::Reader().parse(task_info_buf, task_info);
-    
-    const zmqpp::message& execute_request = _execute_requests[task_info["id"].asUInt64()];
+    std::string content_buf;
+    msg.get(content_buf, 1);
+
+    Json::Value content;
+    Json::Reader().parse(content_buf, content);
+
+    const zmqpp::message& execute_request = _execute_requests[content["id"].asUInt64()];
 
     std::string identities_buf;
     execute_request.get(identities_buf, 0);
     std::string header_buf;
     execute_request.get(header_buf, 3);
-    std::string content_buf;
-    execute_request.get(content_buf, 6);
 
     Json::StreamWriterBuilder builder;
 
-    if (task_info.isMember("side_effects")) {
-        Json::Value stream_content;
-        stream_content["name"] = "stdout";
-        stream_content["text"] = task_info["side_effects"];
-        
-        _send(_iopub_socket, "stream", Json::writeString(builder, stream_content), header_buf, "{}", identities_buf);
+    if (msg_type == "calculate") {
+        Json::Value status_content;
+        status_content["execution_state"] = "busy";
+
+        _send(_iopub_socket, "status", Json::writeString(builder, status_content), header_buf, "{}", identities_buf);
+
+        Json::Value execute_input_content;
+        execute_input_content["execution_count"] = content["id"];
+        execute_input_content["code"] = content["expr"];
+
+        _send(_iopub_socket, "execute_input", Json::writeString(builder, status_content), header_buf, "{}", identities_buf);
     }
-    
-    if (task_info.isMember("error")) {
-        Json::Value reply_content;
-        reply_content["status"] =  "error";
-        reply_content["execution_count"] = task_info["id"];
-        reply_content["ename"] = Json::Value();
-        reply_content["evalue"] = Json::Value();
-        reply_content["traceback"].append(task_info["error"]);
 
-        _send(_shell_socket, "execute_reply", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
-        
-        Json::Value error_content;
-        error_content["execution_count"] = task_info["id"];
-        error_content["ename"] = Json::Value();
-        error_content["evalue"] = Json::Value();
-        error_content["traceback"].append(task_info["error"]);
-        _send(_iopub_socket, "error", Json::writeString(builder, error_content), header_buf, "{}", identities_buf);
-    } else {
-        Json::Value content_data;
-        content_data["text/plain"] = task_info["result"];
+    if (msg_type == "result") {
+        if (content.isMember("side_effects")) {
+            Json::Value stream_content;
+            stream_content["name"] = "stdout";
+            stream_content["text"] = content["side_effects"];
 
-        Json::Value reply_content;
-        reply_content["status"] =  "ok";
-        reply_content["execution_count"] = task_info["id"];
-        reply_content["data"] = content_data;
+            _send(_iopub_socket, "stream", Json::writeString(builder, stream_content), header_buf, "{}", identities_buf);
+        }
 
-        _send(_shell_socket, "execute_result", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
+        if (content.isMember("error")) {
+            Json::Value reply_content;
+            reply_content["status"] =  "error";
+            reply_content["execution_count"] = content["id"];
+            reply_content["ename"] = Json::Value();
+            reply_content["evalue"] = Json::Value();
+            reply_content["traceback"].append(content["error"]);
 
-        Json::Value result_content;
-        result_content["execution_count"] = task_info["id"];
-        result_content["data"] = content_data;
-        result_content["metadata"] = "{}";
-        _send(_iopub_socket, "execute_result", Json::writeString(builder, result_content), header_buf, "{}", identities_buf);
+            _send(_shell_socket, "execute_reply", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
+
+            Json::Value error_content;
+            error_content["execution_count"] = content["id"];
+            error_content["ename"] = Json::Value();
+            error_content["evalue"] = Json::Value();
+            error_content["traceback"].append(content["error"]);
+            _send(_iopub_socket, "error", Json::writeString(builder, error_content), header_buf, "{}", identities_buf);
+        } else {
+            Json::Value content_data;
+            content_data["text/plain"] = content["result"];
+
+            Json::Value reply_content;
+            reply_content["status"] =  "ok";
+            reply_content["execution_count"] = content["id"];
+            reply_content["data"] = content_data;
+
+            _send(_shell_socket, "execute_result", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
+
+            Json::Value result_content;
+            result_content["execution_count"] = content["id"];
+            result_content["data"] = content_data;
+            result_content["metadata"] = "{}";
+            _send(_iopub_socket, "execute_result", Json::writeString(builder, result_content), header_buf, "{}", identities_buf);
+        }
+
+        Json::Value status_content;
+        status_content["execution_state"] = "idle";
+
+        _send(_iopub_socket, "status", Json::writeString(builder, status_content), header_buf, "{}", identities_buf);
     }
 }

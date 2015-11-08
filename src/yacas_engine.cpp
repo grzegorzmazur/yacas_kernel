@@ -61,25 +61,32 @@ void YacasEngine::_worker()
             ti = _tasks.front();
             _tasks.pop_front();
         }
+
+        Json::Value calculate_content;
+        calculate_content["id"] = Json::Value::UInt64(ti.id);
+        calculate_content["expr"] = ti.expr;
+        zmqpp::message status_msg;
+        status_msg << "calculate" << Json::writeString(Json::StreamWriterBuilder(), calculate_content);
+        _socket.send(status_msg);
         
         _side_effects.clear();
         _side_effects.str("");
 
         _yacas.Evaluate((ti.expr + ";"));
 
-        Json::Value v;
-        v["id"] = Json::Value::UInt64(ti.id);
+        Json::Value result_content;
+        result_content["id"] = Json::Value::UInt64(ti.id);
         
         if (_yacas.IsError())
-            v["error"] = _yacas.Error();
+            result_content["error"] = _yacas.Error();
         else
-            v["result"] = _yacas.Result();
+            result_content["result"] = _yacas.Result();
             
-        v["side_effects"] = _side_effects.str();
+        result_content["side_effects"] = _side_effects.str();
         
         
-        zmqpp::message msg;
-        msg << Json::writeString(Json::StreamWriterBuilder(), v);
-        _socket.send(msg);
+        zmqpp::message result_msg;
+        result_msg << "result" << Json::writeString(Json::StreamWriterBuilder(), result_content);
+        _socket.send(result_msg);
     }
 }
