@@ -183,17 +183,18 @@ void YacasKernel::_handle_shell(zmqpp::message&& msg)
     reader.parse(content_buf, content);
 
     if (header["msg_type"] == "kernel_info_request") {
-        Json::Value reply_content;
-        reply_content["protocol_version"] = "5.0";
-        reply_content["implementation"] = "cyacas";
-        reply_content["implementation_version"] = "1.3.6";
         Json::Value language_info;
         language_info["name"] = "yacas";
         language_info["version"] = "1.3.6";
         language_info["mimetype"] = "text/x-yacas";
         language_info["file_extension"] = ".ys";
+
+        Json::Value reply_content;
+        reply_content["protocol_version"] = "5.0";
+        reply_content["implementation"] = "yacas_kernel";
+        reply_content["implementation_version"] = "0.1";
         reply_content["language_info"] = language_info;
-        reply_content["banner"] = "banner";
+        reply_content["banner"] = "yacas_kernel 0.1";
 
         _send(_shell_socket, "kernel_info_reply", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
     }
