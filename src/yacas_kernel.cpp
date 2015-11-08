@@ -78,6 +78,12 @@ void YacasKernel::run()
     for (;;) {
         poller.poll();
         
+        if (poller.has_input(_hb_socket)) {
+            zmqpp::message msg;
+            _hb_socket.receive(msg);
+            _hb_socket.send(msg);
+        }
+
         if (poller.has_input(_shell_socket)) {
             zmqpp::message msg;
             _shell_socket.receive(msg);
