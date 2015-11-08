@@ -228,6 +228,14 @@ void YacasKernel::_handle_engine(const zmqpp::message& msg)
 
     Json::StreamWriterBuilder builder;
 
+    if (task_info.isMember("side_effects")) {
+        Json::Value stream_content;
+        stream_content["name"] = "stdout";
+        stream_content["text"] = task_info["side_effects"];
+        
+        _send(_iopub_socket, "stream", Json::writeString(builder, stream_content), header_buf, "{}", identities_buf);
+    }
+    
     if (task_info.isMember("error")) {
         Json::Value reply_content;
         reply_content["status"] =  "error";
