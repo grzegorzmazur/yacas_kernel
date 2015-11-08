@@ -203,22 +203,6 @@ void YacasKernel::_handle_shell(zmqpp::message&& msg)
         _execute_requests.insert(std::make_pair(_execution_count, std::move(msg)));
         _engine.submit(_execution_count, content["code"].asString());
         
-        Json::Value reply_content;
-        reply_content["status"] =  "ok";
-        reply_content["execution_count"] = Json::Value::UInt64(_execution_count);
-        reply_content["user_variables"] = Json::Value();
-        reply_content["payload"] = Json::Value();
-        reply_content["user_expressions"] = Json::Value();
-        reply_content["data"] = Json::Value();
-
-        Json::Value reply_metadata;
-        reply_metadata["dependencies_met"] = true;
-        reply_metadata["engine"] = boost::uuids::to_string(_uuid);
-        reply_metadata["status"] = "ok";
-        reply_metadata["started"] = now();
-
-        _send(_shell_socket, "execute_result", Json::writeString(builder, reply_content), header_buf, Json::writeString(builder, reply_metadata), identities_buf);
-        
         _execution_count += 1;
     }
 }
@@ -236,25 +220,44 @@ void YacasKernel::_handle_engine(const zmqpp::message& msg)
 
     std::string identities_buf;
     execute_request.get(identities_buf, 0);
-    std::string signature_buf;
-    execute_request.get(signature_buf, 2);
     std::string header_buf;
     execute_request.get(header_buf, 3);
-    std::string parent_header_buf;
-    execute_request.get(parent_header_buf, 4);
-    std::string metadata_buf;
-    execute_request.get(metadata_buf, 5);
     std::string content_buf;
     execute_request.get(content_buf, 6);
 
     Json::StreamWriterBuilder builder;
 
-    Json::Value iopub_content_data;
-    iopub_content_data["text/plain"] = task_info["result"];
+    if (task_info.isMember("error")) {
+        Json::Value reply_content;
+        reply_content["status"] =  "error";
+        reply_content["execution_count"] = task_info["id"];
+        reply_content["ename"] = Json::Value();
+        reply_content["evalue"] = Json::Value();
+        reply_content["traceback"].append(task_info["error"]);
 
-    Json::Value iopub_content;
-    iopub_content["execution_count"] = task_info["id"];
-    iopub_content["data"] = iopub_content_data;
-    iopub_content["metadata"] = "{}";
-    _send(_iopub_socket, "execute_result", Json::writeString(builder, iopub_content), header_buf, "{}", identities_buf);
+        _send(_shell_socket, "execute_reply", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
+        
+        Json::Value error_content;
+        error_content["execution_count"] = task_info["id"];
+        error_content["ename"] = Json::Value();
+        error_content["evalue"] = Json::Value();
+        error_content["traceback"].append(task_info["error"]);
+        _send(_iopub_socket, "error", Json::writeString(builder, error_content), header_buf, "{}", identities_buf);
+    } else {
+        Json::Value content_data;
+        content_data["text/plain"] = task_info["result"];
+
+        Json::Value reply_content;
+        reply_content["status"] =  "ok";
+        reply_content["execution_count"] = task_info["id"];
+        reply_content["data"] = content_data;
+
+        _send(_shell_socket, "execute_result", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
+
+        Json::Value result_content;
+        result_content["execution_count"] = task_info["id"];
+        result_content["data"] = content_data;
+        result_content["metadata"] = "{}";
+        _send(_iopub_socket, "execute_result", Json::writeString(builder, result_content), header_buf, "{}", identities_buf);
+    }
 }

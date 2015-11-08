@@ -67,11 +67,17 @@ void YacasEngine::_worker()
 
         _yacas.Evaluate((ti.expr + ";"));
 
-        const std::string result = _yacas.Result();
-
         Json::Value v;
         v["id"] = Json::Value::UInt64(ti.id);
-        v["result"] = result;
+        
+        if (_yacas.IsError())
+            v["error"] = _yacas.Error();
+        else
+            v["result"] = _yacas.Result();
+            
+        v["side_effects"] = _side_effects.str();
+        
+        
         zmqpp::message msg;
         msg << Json::writeString(Json::StreamWriterBuilder(), v);
         _socket.send(msg);
