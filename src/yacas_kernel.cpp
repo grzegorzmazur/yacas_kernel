@@ -50,7 +50,6 @@ YacasKernel::YacasKernel(const std::string& scripts_path, const Json::Value& con
     _engine_socket(_ctx, zmqpp::socket_type::pair),
     _auth(config["key"].asString()),
     _execution_count(1),
-    _yacas(new CYacas(_side_effects)),
     _engine(scripts_path, _ctx, "inproc://engine")
 {
     const std::string transport = config["transport"].asString();

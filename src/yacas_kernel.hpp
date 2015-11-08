@@ -70,9 +70,6 @@ private:
     
     unsigned long _execution_count;
     
-    std::ostringstream _side_effects;
-    CYacas* _yacas;
-    
     YacasEngine _engine;
     
     std::map<unsigned long, zmqpp::message> _execute_requests;
