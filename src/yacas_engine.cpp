@@ -28,7 +28,8 @@
 
 YacasEngine::YacasEngine(const std::string& scripts_path, const zmqpp::context& ctx, const std::string& endpoint):
     _yacas(_side_effects),
-    _socket(ctx, zmqpp::socket_type::pair)
+    _socket(ctx, zmqpp::socket_type::pair),
+    _shutdown(false)
 {
     _yacas.Evaluate(std::string("DefaultDirectory(\"") + scripts_path + std::string("\");"));
     _yacas.Evaluate("Load(\"yacasinit.ys\");");
@@ -37,6 +38,17 @@ YacasEngine::YacasEngine(const std::string& scripts_path, const zmqpp::context& 
     
     _worker_thread = new std::thread(std::bind(&YacasEngine::_worker, this));
 }
+
+YacasEngine::~YacasEngine()
+{
+    _shutdown = true;
+    _yacas.getDefEnv().getEnv().stop_evaluation = true;
+    _cv.notify_all();
+    _worker_thread->join();
+    
+    delete _worker_thread;
+}
+
 
 void YacasEngine::submit(unsigned long id, const std::string& expr)
 {
@@ -55,8 +67,11 @@ void YacasEngine::_worker()
         {
             std::unique_lock<std::mutex> lock(_mtx);
     
-            while (_tasks.empty())
+            while (_tasks.empty() && !_shutdown)
                 _cv.wait(lock);
+            
+            if (_shutdown)
+                return;
             
             ti = _tasks.front();
             _tasks.pop_front();

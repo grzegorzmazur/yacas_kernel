@@ -50,7 +50,8 @@ YacasKernel::YacasKernel(const std::string& scripts_path, const Json::Value& con
     _engine_socket(_ctx, zmqpp::socket_type::pair),
     _auth(config["key"].asString()),
     _execution_count(1),
-    _engine(scripts_path, _ctx, "inproc://engine")
+    _engine(scripts_path, _ctx, "inproc://engine"),
+    _shutdown(false)
 {
     const std::string transport = config["transport"].asString();
     const std::string ip = config["ip"].asString();
@@ -89,6 +90,9 @@ void YacasKernel::run()
             _handle_shell(std::move(msg));
         }
 
+        if (_shutdown)
+            return;
+        
         if (poller.has_input(_engine_socket)) {
             zmqpp::message msg;
             _engine_socket.receive(msg);
@@ -204,6 +208,15 @@ void YacasKernel::_handle_shell(zmqpp::message&& msg)
         _engine.submit(_execution_count, content["code"].asString());
         
         _execution_count += 1;
+    }
+    
+    if (header["msg_type"] == "shutdown_request") {
+        Json::Value reply_content;
+        reply_content["status"] = "ok";
+
+        _send(_shell_socket, "shutdown_reply", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
+        
+        _shutdown = true;
     }
 }
 

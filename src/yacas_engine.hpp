@@ -29,6 +29,7 @@
 
 #include <zmqpp/zmqpp.hpp>
 
+#include <atomic>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -42,6 +43,8 @@ public:
             const std::string& scripts_path,
             const zmqpp::context& ctx,
             const std::string& endpoint = "inproc://engine");
+    
+    ~YacasEngine();
     
     void submit(unsigned long id, const std::string& expr);
     
@@ -64,6 +67,8 @@ private:
     std::thread* _worker_thread;
     
     zmqpp::socket _socket;
+    
+    std::atomic<bool> _shutdown;
 };
 
 

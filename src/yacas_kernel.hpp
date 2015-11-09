@@ -73,6 +73,8 @@ private:
     YacasEngine _engine;
     
     std::map<unsigned long, zmqpp::message> _execute_requests;
+    
+    bool _shutdown;
 };
 
 #endif
