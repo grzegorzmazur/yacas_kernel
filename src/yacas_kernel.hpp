@@ -72,6 +72,10 @@ private:
     
     YacasEngine _engine;
     
+    bool _tex_output;
+    std::stringstream _side_effects;
+    CYacas _yacas;
+
     std::map<unsigned long, zmqpp::message> _execute_requests;
     
     bool _shutdown;

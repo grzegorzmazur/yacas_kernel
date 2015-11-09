@@ -51,6 +51,8 @@ YacasKernel::YacasKernel(const std::string& scripts_path, const Json::Value& con
     _auth(config["key"].asString()),
     _execution_count(1),
     _engine(scripts_path, _ctx, "inproc://engine"),
+    _tex_output(true),
+    _yacas(_side_effects),
     _shutdown(false)
 {
     const std::string transport = config["transport"].asString();
@@ -62,6 +64,9 @@ YacasKernel::YacasKernel(const std::string& scripts_path, const Json::Value& con
     _stdin_socket.bind(transport + "://" + ip + ":" + config["stdin_port"].asString());
     _shell_socket.bind(transport + "://" + ip + ":" + config["shell_port"].asString());
     _engine_socket.bind("inproc://engine");
+    
+    _yacas.Evaluate(std::string("DefaultDirectory(\"") + scripts_path + std::string("\");"));
+    _yacas.Evaluate("Load(\"yacasinit.ys\");");
 }
 
 void YacasKernel::run()
@@ -279,9 +284,25 @@ void YacasKernel::_handle_engine(const zmqpp::message& msg)
             error_content["traceback"].append(content["error"]);
             _send(_iopub_socket, "error", Json::writeString(builder, error_content), header_buf, "{}", identities_buf);
         } else {
+            std::string text_result = content["result"].asString();
+            if (text_result.back() == ';')
+                text_result.pop_back();
+            
             Json::Value content_data;
-            content_data["text/plain"] = content["result"];
+            content_data["text/plain"] = text_result;
 
+            if (_tex_output) {
+                _side_effects.clear();
+                _side_effects.str("");
+
+                _yacas.Evaluate(std::string("TeXForm(Hold(") + text_result + "));");
+
+                std::string tex_result = _yacas.Result();
+                tex_result = tex_result.substr(1, tex_result.size() - 3);
+
+                content_data["text/latex"] = tex_result;
+            }
+            
             Json::Value reply_content;
             reply_content["status"] =  "ok";
             reply_content["execution_count"] = content["id"];
