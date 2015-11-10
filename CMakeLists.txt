@@ -52,3 +52,31 @@ endif ()
   
 add_executable (yacas_kernel src/main.cpp src/yacas_kernel.cpp src/yacas_engine.cpp src/hmac_sha256.cpp)
 target_link_libraries (yacas_kernel libyacas ${ZMQPP_LIBRARY} ${ZEROMQ_LIBRARY} ${JSONCPP_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY} ${Boost_LIBRARIES} pthread)
+
+install (TARGETS yacas_kernel RUNTIME DESTINATION bin)
+
+set (CPACK_SOURCE_GENERATOR "TGZ")
+set (CPACK_SOURCE_IGNORE_FILES "/build/;/.git/;/install/;/nbproject/;~$;${CPACK_SOURCE_IGNORE_FILES}")
+set (CPACK_SOURCE_PACKAGE_FILE_NAME "yacas_kernel_${YACAS_KERNEL_VERSION}")
+
+set (CPACK_PACKAGE_NAME "yacas_kernel")
+set (CPACK_PACKAGE_VENDOR "Yacas Team")
+set (CPACK_PACKAGE_CONTACT "yacas@googlegroups.com")
+set (CPACK_PACKAGE_DESCRIPTION_SUMMARY "Native yacas kernel for Jupyter.")
+set (CPACK_PACKAGE_DESCRIPTION_FILE "${PROJECT_SOURCE_DIR}/README.rst")
+set (CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+
+set (CPACK_GENERATOR DEB)
+execute_process (COMMAND dpkg --print-architecture OUTPUT_VARIABLE CPACK_DEBIAN_PACKAGE_ARCHITECTURE)
+string (REGEX REPLACE "(\r?\n)+$" "" CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}")
+set (CPACK_PACKAGE_FILE_NAME "yacas_kernel_${YACAS_KERNEL_VERSION}-1_${CPACK_DEBIAN_PACKAGE_ARCHITECTURE}")
+set (CPACK_DEBIAN_PACKAGE_DESCRIPTION "Native yacas kernel for Jupyter, an interactive data science and scientific
+ computing environment. Yacas is an easy to use, general purpose Computer
+ Algebra System, a program for symbolic manipulation of mathematical 
+ expressions. yacas_kernel allows one for performing symbolic calculations
+ in interactive computing environment of Jupyter notebook.")
+set (CPACK_DEBIAN_PACKAGE_SECTION "math")
+set (CPACK_DEBIAN_PACKAGE_RECOMMENDS "yagy")
+set (CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_CURRENT_SOURCE_DIR}/debian/postinst;")
+
+include (CPack)
