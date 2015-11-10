@@ -23,6 +23,8 @@
  */
 
 #include "yacas_kernel.hpp"
+#include "yacas_kernel_version.hpp"
+#include "yacas/yacas_version.h"
 
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -202,7 +204,7 @@ void YacasKernel::_handle_shell(zmqpp::message&& msg)
         reply_content["implementation"] = "yacas_kernel";
         reply_content["implementation_version"] = "0.1";
         reply_content["language_info"] = language_info;
-        reply_content["banner"] = "yacas_kernel 0.1";
+        reply_content["banner"] = "yacas_kernel " YACAS_KERNEL_VERSION "\npowered by yacas " YACAS_VERSION;
 
         _send(_shell_socket, "kernel_info_reply", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
     }

@@ -8,8 +8,20 @@ if(NOT EXISTS ${YACAS_PREFIX}/include/yacas/yacas.h)
   message(SEND_ERROR "Can't find yacas.h in ${YACAS_PREFIX}/include/yacas")
 endif()
 
+set (YACAS_KERNEL_VERSION_MAJOR 1)
+set (YACAS_KERNEL_VERSION_MINOR 0)
+set (YACAS_KERNEL_VERSION_MICRO 0)
+
+set (YACAS_KERNEL_VERSION ${YACAS_KERNEL_VERSION_MAJOR}.${YACAS_KERNEL_VERSION_MINOR}.${YACAS_KERNEL_VERSION_MICRO})
+
+configure_file (
+  "${PROJECT_SOURCE_DIR}/yacas_kernel_version.hpp.in"
+  "${PROJECT_BINARY_DIR}/yacas_kernel_version.hpp"
+  )
+
 include_directories (
   "${YACAS_PREFIX}/include"
+  "${PROJECT_BINARY_DIR}"
   )
 
 if (${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU" OR ${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
