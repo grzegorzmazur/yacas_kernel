@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.8.11)
+cmake_minimum_required (VERSION 3.2.2)
 
 project (yacas_kernel CXX)
 
@@ -40,7 +40,7 @@ find_path (JSONCPP_INCLUDE_DIR json.h)
 find_library (JSONCPP_LIBRARY NAMES jsoncpp)
 
 find_package (OpenSSL)
-find_package (Boost REQUIRED program_options)
+find_package (Boost REQUIRED date_time)
 
 add_library (libyacas STATIC IMPORTED)
 
@@ -51,4 +51,4 @@ else ()
 endif ()
   
 add_executable (yacas_kernel src/main.cpp src/yacas_kernel.cpp src/yacas_engine.cpp src/hmac_sha256.cpp)
-target_link_libraries (yacas_kernel libyacas ${ZMQPP_LIBRARY} ${ZEROMQ_LIBRARY} ${JSONCPP_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY} pthread)
+target_link_libraries (yacas_kernel libyacas ${ZMQPP_LIBRARY} ${ZEROMQ_LIBRARY} ${JSONCPP_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY} ${Boost_LIBRARIES} pthread)
