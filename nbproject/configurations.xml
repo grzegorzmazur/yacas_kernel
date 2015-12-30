@@ -56,6 +56,9 @@
           <executablePath></executablePath>
           <ccTool>
             <standard>8</standard>
+            <incDir>
+              <pElem>build/default</pElem>
+            </incDir>
           </ccTool>
         </makeTool>
         <preBuild>
