@@ -42,19 +42,43 @@ public:
     void run();
     
 private:
-    std::string _signature(const zmqpp::message&);
-    
-    void _send(zmqpp::socket&,
-        const std::string& msg_type, const std::string& content, 
-        const std::string& parent_header, const std::string& metadata, 
-        const std::string& identities);
-    
-    void _handle_shell(zmqpp::message&&);
-    void _handle_engine(const zmqpp::message&);
-    
-    boost::uuids::random_generator _uuid_gen;
+    class Session: NonCopyable {
+    public:
+        Session(const std::string& key);
+        
+        const HMAC_SHA256& auth() const { return _auth; };
+        const boost::uuids::uuid& uuid() const { return _uuid; };
 
-    boost::uuids::uuid _uuid;
+        boost::uuids::uuid generate_msg_uuid() const { return _uuid_gen(); }
+    
+    private:
+        HMAC_SHA256 _auth;
+
+        mutable boost::uuids::random_generator _uuid_gen;
+        boost::uuids::uuid _uuid;
+    };
+    
+    class Request: NonCopyable {
+    public:
+        Request(const Session& session, const zmqpp::message& msg);
+
+        const Json::Value& header() const { return _header; }
+        const Json::Value& content() const { return _content; }
+        
+        void reply(zmqpp::socket&, const std::string& type, const Json::Value& content) const;
+        
+    private:
+        const Session& _session;
+        Json::Value _header;
+        Json::Value _content;
+        Json::Value _metadata;
+        std::string _identities_buf;
+    };
+    
+    void _handle_shell(const std::shared_ptr<Request>& request);
+    void _handle_engine(const zmqpp::message& msg);
+    
+    Session _session;
     
     zmqpp::context _ctx;
     
@@ -66,8 +90,6 @@ private:
     
     zmqpp::socket _engine_socket;
     
-    HMAC_SHA256 _auth;
-    
     unsigned long _execution_count;
     
     YacasEngine _engine;
@@ -76,7 +98,7 @@ private:
     std::stringstream _side_effects;
     CYacas _yacas;
 
-    std::map<unsigned long, zmqpp::message> _execute_requests;
+    std::map<unsigned long, std::shared_ptr<Request> > _execute_requests;
     
     bool _shutdown;
 };

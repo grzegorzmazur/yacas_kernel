@@ -104,5 +104,91 @@
       <item path="src/yacas_kernel.hpp" ex="false" tool="3" flavor2="0">
       </item>
     </conf>
+    <conf name="release" type="0">
+      <toolsSet>
+        <compilerSet>default</compilerSet>
+        <dependencyChecking>false</dependencyChecking>
+        <rebuildPropChanged>false</rebuildPropChanged>
+      </toolsSet>
+      <flagsDictionary>
+        <element flagsID="0" commonFlags="-std=c++11 -O3"/>
+      </flagsDictionary>
+      <codeAssistance>
+      </codeAssistance>
+      <makefileType>
+        <makeTool>
+          <buildCommandWorkingDir>build/release</buildCommandWorkingDir>
+          <buildCommand>${MAKE} -f Makefile</buildCommand>
+          <cleanCommand>${MAKE} -f Makefile clean</cleanCommand>
+          <executablePath></executablePath>
+          <ccTool>
+            <standard>8</standard>
+          </ccTool>
+        </makeTool>
+        <preBuild>
+          <preBuildCommandWorkingDir>build/release</preBuildCommandWorkingDir>
+          <preBuildCommand>cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=${IDE_CC} -DCMAKE_CXX_COMPILER=${IDE_CXX} -DCMAKE_C_FLAGS_DEBUG="-g3 -gdwarf-2" -DCMAKE_CXX_FLAGS_DEBUG="-g3 -gdwarf-2" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DYACAS_PREFIX=/home/mazur/NetBeansProjects/github/yacas/install/linux/release ../..</preBuildCommand>
+        </preBuild>
+      </makefileType>
+      <item path="build/release/CMakeFiles/3.2.2/CompilerIdCXX/CMakeCXXCompilerId.cpp"
+            ex="false"
+            tool="1"
+            flavor2="4">
+      </item>
+      <item path="build/release/CMakeFiles/feature_tests.cxx"
+            ex="false"
+            tool="1"
+            flavor2="4">
+      </item>
+      <folder path="0/build">
+        <ccTool>
+          <incDir>
+            <pElem>build/default</pElem>
+            <pElem>build/default/CMakeFiles/CMakeTmp</pElem>
+          </incDir>
+        </ccTool>
+      </folder>
+      <folder path="0/src">
+        <ccTool>
+          <preprocessorList>
+            <Elem>NDEBUG</Elem>
+          </preprocessorList>
+        </ccTool>
+      </folder>
+      <item path="src/hmac_sha256.cpp" ex="false" tool="1" flavor2="8">
+        <ccTool flags="0">
+          <incDir>
+            <pElem>build/default</pElem>
+            <pElem>build/default/CMakeFiles/CMakeTmp</pElem>
+            <pElem>../yacas/install/linux/release/include</pElem>
+            <pElem>build/release</pElem>
+          </incDir>
+        </ccTool>
+      </item>
+      <item path="src/main.cpp" ex="false" tool="1" flavor2="8">
+        <ccTool flags="0">
+          <incDir>
+            <pElem>../yacas/install/linux/release/include</pElem>
+            <pElem>build/release</pElem>
+          </incDir>
+        </ccTool>
+      </item>
+      <item path="src/yacas_engine.cpp" ex="false" tool="1" flavor2="8">
+        <ccTool flags="0">
+          <incDir>
+            <pElem>../yacas/install/linux/release/include</pElem>
+            <pElem>build/release</pElem>
+          </incDir>
+        </ccTool>
+      </item>
+      <item path="src/yacas_kernel.cpp" ex="false" tool="1" flavor2="8">
+        <ccTool flags="0">
+          <incDir>
+            <pElem>../yacas/install/linux/release/include</pElem>
+            <pElem>build/release</pElem>
+          </incDir>
+        </ccTool>
+      </item>
+    </conf>
   </confs>
 </configurationDescriptor>

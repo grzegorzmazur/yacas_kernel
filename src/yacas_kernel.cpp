@@ -43,14 +43,13 @@ namespace {
 }
 
 YacasKernel::YacasKernel(const std::string& scripts_path, const Json::Value& config):
-    _uuid(_uuid_gen()),
+    _session(config["key"].asString()),
     _hb_socket(_ctx, zmqpp::socket_type::reply),
     _iopub_socket(_ctx, zmqpp::socket_type::publish),
     _control_socket(_ctx, zmqpp::socket_type::router),
     _stdin_socket(_ctx, zmqpp::socket_type::router),
     _shell_socket(_ctx, zmqpp::socket_type::router),
     _engine_socket(_ctx, zmqpp::socket_type::pair),
-    _auth(config["key"].asString()),
     _execution_count(1),
     _engine(scripts_path, _ctx, "inproc://engine"),
     _tex_output(true),
@@ -94,21 +93,44 @@ void YacasKernel::run()
         if (poller.has_input(_shell_socket)) {
             zmqpp::message msg;
             _shell_socket.receive(msg);
-            _handle_shell(std::move(msg));
+            _handle_shell(std::make_shared<Request>(_session, msg));
+        }
+
+        if (poller.has_input(_control_socket)) {
+            zmqpp::message msg;
+            _control_socket.receive(msg);
+            Request request(_session, msg);
+            
+            if (request.header()["msg_type"].asString() == "shutdown_request")
+                _shutdown = true;
         }
 
         if (_shutdown)
             return;
+
+
+        if (poller.has_input(_stdin_socket)) {
+            zmqpp::message msg;
+            _stdin_socket.receive(msg);
+        }
         
         if (poller.has_input(_engine_socket)) {
             zmqpp::message msg;
             _engine_socket.receive(msg);
-            _handle_engine(std::move(msg));
+            _handle_engine(msg);
         }
     }
 }
 
-std::string YacasKernel::_signature(const zmqpp::message& msg)
+YacasKernel::Session::Session(const std::string& key):
+    _auth(key),
+    _uuid(_uuid_gen())
+{
+}
+
+
+YacasKernel::Request::Request(const Session& session, const zmqpp::message& msg):
+    _session(session)
 {
     std::string header_buf;
     msg.get(header_buf, 3);
@@ -119,31 +141,47 @@ std::string YacasKernel::_signature(const zmqpp::message& msg)
     std::string content_buf;
     msg.get(content_buf, 6);
 
-    HMAC_SHA256 auth(_auth);
+    HMAC_SHA256 auth(_session.auth());
     
     auth.update(header_buf);
     auth.update(parent_header_buf);
     auth.update(metadata_buf);
     auth.update(content_buf);
+
+    std::string signature_buf;
+    msg.get(signature_buf, 2);
+ 
+    if (auth.hexdigest() != signature_buf)
+        throw std::runtime_error("invalid signature");
+
+    msg.get(_identities_buf, 0);
     
-    return auth.hexdigest();
+    Json::Reader reader;
+
+    reader.parse(header_buf, _header);
+    reader.parse(content_buf, _content);
+    reader.parse(metadata_buf, _metadata);
 }
 
-void YacasKernel::_send(zmqpp::socket& socket, const std::string& msg_type,
-        const std::string& content_buf, const std::string& parent_header_buf,
-        const std::string& metadata_buf, const std::string& identities_buf)
+void YacasKernel::Request::reply(zmqpp::socket& socket, const std::string& msg_type, const Json::Value& content) const
 {
     Json::Value header;
     header["username"] = "kernel";
     header["version"] = "5.0";
-    header["session"] = boost::uuids::to_string(_uuid);
+    header["session"] = boost::uuids::to_string(_session.uuid());
     header["date"]  = now();
-    header["msg_id"] = boost::uuids::to_string(_uuid_gen());
+    header["msg_id"] = boost::uuids::to_string(_session.generate_msg_uuid());
     header["msg_type"] = msg_type;
+
     Json::StreamWriterBuilder builder;
-    std::string header_buf = Json::writeString(builder, header);
+
+    const std::string content_buf = Json::writeString(builder, content);
+    // FIXME:
+    const std::string metadata_buf = "{}";
+    const std::string header_buf = Json::writeString(builder, header);
+    const std::string parent_header_buf = Json::writeString(builder, _header);
     
-    HMAC_SHA256 auth(_auth);
+    HMAC_SHA256 auth(_session.auth());
     
     auth.update(header_buf);
     auth.update(parent_header_buf);
@@ -151,7 +189,7 @@ void YacasKernel::_send(zmqpp::socket& socket, const std::string& msg_type,
     auth.update(content_buf);
     
     zmqpp::message msg;
-    msg.add(identities_buf);
+    msg.add(_identities_buf);
     msg.add("<IDS|MSG>");
     msg.add(auth.hexdigest());
     msg.add(header_buf);
@@ -162,68 +200,52 @@ void YacasKernel::_send(zmqpp::socket& socket, const std::string& msg_type,
     socket.send(msg);
 }
 
-
-
-void YacasKernel::_handle_shell(zmqpp::message&& msg)
+void YacasKernel::_handle_shell(const std::shared_ptr<Request>& request)
 {
-    Json::StreamWriterBuilder builder;
+    const std::string msg_type = request->header()["msg_type"].asString();
     
-    std::string identities_buf;
-    msg.get(identities_buf, 0);
-    std::string signature_buf;
-    msg.get(signature_buf, 2);
-    std::string header_buf;
-    msg.get(header_buf, 3);
-    std::string parent_header_buf;
-    msg.get(parent_header_buf, 4);
-    std::string metadata_buf;
-    msg.get(metadata_buf, 5);
-    std::string content_buf;
-    msg.get(content_buf, 6);
-
-    if (_signature(msg) != signature_buf)
-        throw std::runtime_error("invalid signature");
-    
-    Json::Reader reader;
-
-    Json::Value header;
-    reader.parse(header_buf, header);
-
-    Json::Value content;
-    reader.parse(content_buf, content);
-
-    if (header["msg_type"] == "kernel_info_request") {
+    if (msg_type == "kernel_info_request") {
         Json::Value language_info;
         language_info["name"] = "yacas";
         language_info["version"] = "1.3.6";
         language_info["mimetype"] = "text/x-yacas";
         language_info["file_extension"] = ".ys";
 
+        Json::Value homepage;
+        homepage["text"] = "Yacas Homepage";
+        homepage["url"] = "http://www.yacas.org";
+
+        Json::Value docs;
+        docs["text"] = "Yacas Documentation";
+        docs["url"] = "http://yacas.readthedocs.org";
+        
+        Json::Value help_links;
+        help_links.append(homepage);
+        help_links.append(docs);
+        
         Json::Value reply_content;
-        reply_content["protocol_version"] = "5.0";
+        reply_content["protocol_version"] = "5.1";
         reply_content["implementation"] = "yacas_kernel";
         reply_content["implementation_version"] = "0.1";
         reply_content["language_info"] = language_info;
         reply_content["banner"] = "yacas_kernel " YACAS_KERNEL_VERSION "\npowered by yacas " YACAS_VERSION;
+        reply_content["help_links"] = help_links;
 
-        _send(_shell_socket, "kernel_info_reply", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
-    }
-    
-    if (header["msg_type"] == "execute_request") {
+        request->reply(_shell_socket, "kernel_info_reply", reply_content);
+    } else if (msg_type == "execute_request") {
 
-        _execute_requests.insert(std::make_pair(_execution_count, std::move(msg)));
-        _engine.submit(_execution_count, content["code"].asString());
+        _execute_requests.insert(std::make_pair(_execution_count, std::move(request)));
+        _engine.submit(_execution_count, request->content()["code"].asString());
         
         _execution_count += 1;
-    }
-    
-    if (header["msg_type"] == "shutdown_request") {
+    } else if (msg_type == "shutdown_request") {
+
+        _shutdown = true;
+
         Json::Value reply_content;
         reply_content["status"] = "ok";
 
-        _send(_shell_socket, "shutdown_reply", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
-        
-        _shutdown = true;
+        request->reply(_shell_socket, "shutdown_reply", reply_content);
     }
 }
 
@@ -231,42 +253,36 @@ void YacasKernel::_handle_engine(const zmqpp::message& msg)
 {
     std::string msg_type;
     msg.get(msg_type, 0);
-
+    
     std::string content_buf;
     msg.get(content_buf, 1);
 
     Json::Value content;
     Json::Reader().parse(content_buf, content);
 
-    const zmqpp::message& execute_request = _execute_requests[content["id"].asUInt64()];
-
-    std::string identities_buf;
-    execute_request.get(identities_buf, 0);
-    std::string header_buf;
-    execute_request.get(header_buf, 3);
-
-    Json::StreamWriterBuilder builder;
-
+    std::shared_ptr<YacasKernel::Request> request = _execute_requests[content["id"].asUInt64()];
+    
+    bool condemned = false;
+    
     if (msg_type == "calculate") {
         Json::Value status_content;
         status_content["execution_state"] = "busy";
 
-        _send(_iopub_socket, "status", Json::writeString(builder, status_content), header_buf, "{}", identities_buf);
+        request->reply(_iopub_socket, "status", status_content);
 
         Json::Value execute_input_content;
-        execute_input_content["execution_count"] = content["id"];
-        execute_input_content["code"] = content["expr"];
+        execute_input_content["execution_count"] = request->content()["id"];
+        execute_input_content["code"] = request->content()["expr"];
 
-        _send(_iopub_socket, "execute_input", Json::writeString(builder, status_content), header_buf, "{}", identities_buf);
-    }
-
-    if (msg_type == "result") {
+        request->reply(_iopub_socket, "execute_input", execute_input_content);
+    } else if (msg_type == "result") {
+        
         if (content.isMember("side_effects")) {
             Json::Value stream_content;
             stream_content["name"] = "stdout";
             stream_content["text"] = content["side_effects"];
 
-            _send(_iopub_socket, "stream", Json::writeString(builder, stream_content), header_buf, "{}", identities_buf);
+            request->reply(_iopub_socket, "stream", stream_content);
         }
 
         if (content.isMember("error")) {
@@ -277,14 +293,15 @@ void YacasKernel::_handle_engine(const zmqpp::message& msg)
             reply_content["evalue"] = Json::Value();
             reply_content["traceback"].append(content["error"]);
 
-            _send(_shell_socket, "execute_reply", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
+            request->reply(_shell_socket, "execute_reply", reply_content);
 
             Json::Value error_content;
             error_content["execution_count"] = content["id"];
             error_content["ename"] = Json::Value();
             error_content["evalue"] = Json::Value();
             error_content["traceback"].append(content["error"]);
-            _send(_iopub_socket, "error", Json::writeString(builder, error_content), header_buf, "{}", identities_buf);
+            
+            request->reply(_iopub_socket, "error", error_content);
         } else {
             std::string text_result = content["result"].asString();
             if (text_result.back() == ';')
@@ -310,18 +327,24 @@ void YacasKernel::_handle_engine(const zmqpp::message& msg)
             reply_content["execution_count"] = content["id"];
             reply_content["data"] = content_data;
 
-            _send(_shell_socket, "execute_result", Json::writeString(builder, reply_content), header_buf, "{}", identities_buf);
+            request->reply(_shell_socket, "execute_result", reply_content);
 
             Json::Value result_content;
             result_content["execution_count"] = content["id"];
             result_content["data"] = content_data;
             result_content["metadata"] = "{}";
-            _send(_iopub_socket, "execute_result", Json::writeString(builder, result_content), header_buf, "{}", identities_buf);
+            
+            request->reply(_iopub_socket, "execute_result", result_content);
+            
+            condemned = true;
         }
 
         Json::Value status_content;
         status_content["execution_state"] = "idle";
 
-        _send(_iopub_socket, "status", Json::writeString(builder, status_content), header_buf, "{}", identities_buf);
+        request->reply(_iopub_socket, "status", status_content);
+        
+        if (condemned)
+            _execute_requests.erase(content["id"].asUInt64());
     }
 }
